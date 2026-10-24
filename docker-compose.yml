@@ -1,0 +1,46 @@
+version: '3.8'
+
+services:
+  # 1. Google Cloud AlloyDB Omni Database (On-Premises / Air-Gapped)
+  alloydb-omni:
+    image: gcr.io/alloydb-omni/alloydbomni:18
+    container_name: airgapshield-alloydb
+    environment:
+      POSTGRES_PASSWORD: airgap_secure_password
+      POSTGRES_DB: airgap_shield
+    ports:
+      - "5432:5432"
+    volumes:
+      - ./schema.sql:/docker-entrypoint-initdb.d/init.sql
+      - alloydb_data:/var/lib/postgresql/data
+    restart: always
+
+  # 2. Local Gemma 4 Inference Engine (Ollama Container on CPU/GPU)
+  ollama-gemma4:
+    image: ollama/ollama:latest
+    container_name: airgapshield-gemma4
+    ports:
+      - "8080:11434"
+    volumes:
+      - ollama_models:/root/.ollama
+    restart: always
+
+  # 3. AirgapShield Autonomous Incident Commander
+  airgapshield-app:
+    build: .
+    container_name: airgapshield-commander
+    environment:
+      DATABASE_URL: "postgresql://postgres:airgap_secure_password@alloydb-omni:5432/airgap_shield"
+      LOCAL_OLLAMA_URI: "http://ollama-gemma4:11434/api/generate"
+      LOCAL_TEI_URI: "http://ollama-gemma4:11434/api/embeddings"
+      PORT: "8088"
+    ports:
+      - "8088:8088"
+    depends_on:
+      - alloydb-omni
+      - ollama-gemma4
+    restart: always
+
+volumes:
+  alloydb_data:
+  ollama_models:
